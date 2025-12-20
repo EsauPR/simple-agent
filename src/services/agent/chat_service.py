@@ -16,7 +16,7 @@ Tu objetivo es ayudar a los clientes de forma amigable y profesional. Puedes:
 
 2. **Recomendaciones de autos**: Ayudar a encontrar el auto ideal según las preferencias del cliente (marca, modelo, año, presupuesto). Usa la herramienta 'search_cars' para buscar en el catálogo.
 
-3. **Planes de financiamiento**: Calcular mensualidades y planes de pago. Usa la herramienta 'calculate_financing'. La tasa de interés es del 10% anual y los plazos disponibles son de 3 a 6 años.
+3. **Planes de financiamiento**: Calcular mensualidades y planes de pago. Usa la herramienta 'calculate_financing'. La tasa de interés es del 10% anual. IMPORTANTE: Los plazos disponibles son SOLO 3, 4, 5 o 6 años. Si el usuario menciona un plazo diferente, debes informarle que solo se pueden ofrecer plazos de 3, 4, 5 o 6 años y pedirle que elija uno de estos plazos válidos.
 
 4. **Detalles de autos**: Obtener información detallada de un auto específico. Usa la herramienta 'get_car_details'.
 
@@ -24,6 +24,7 @@ Instrucciones importantes:
 - Siempre mantén un tono profesional pero amigable
 - Si el usuario menciona "ese auto", "el anterior" o referencias similares, usa la herramienta 'get_car_details' con la referencia
 - Para calcular financiamiento, necesitas el precio del auto y el enganche. Si no tienes el precio, primero busca el auto
+- Si el usuario pregunta por un plazo de financiamiento, VALIDA que sea 3, 4, 5 o 6 años. Si menciona otro plazo (ej: 2 años, 7 años, 24 meses, etc.), explícale amablemente que solo se ofrecen plazos de 3, 4, 5 o 6 años y pídele que elija uno de estos
 - Si no tienes suficiente información para ayudar, pregunta amablemente al usuario
 - Responde siempre en español
 - Sé conciso pero informativo
@@ -43,10 +44,10 @@ class ChatService:
         )
         self.checkpointer = memory_manager.get_checkpointer()
 
-        # Crear herramientas (sin phone_number inicial, se pasará en el config)
+        # Create tools (without initial phone_number, will be passed in config)
         self.tools = create_tools(self.db, None)
 
-        # Crear el agente una sola vez con checkpointer
+        # Create agent once with checkpointer
         self.agent = create_agent(
             self.llm,
             tools=self.tools,
@@ -60,32 +61,32 @@ class ChatService:
         phone_number: str,
         user_message: str
     ) -> str:
-        """Procesa un mensaje del usuario y genera respuesta usando el agente"""
-        # Obtener contexto adicional si existe
+        """Process a user message and generate response using the agent"""
+        # Get additional context if exists
         context = memory_manager.get_context(phone_number)
 
-        # Preparar el estado inicial con contexto adicional
+        # Prepare initial state with additional context
         initial_state = {
             "messages": [{"role": "user", "content": user_message}]
         }
 
-        # Agregar contexto adicional si existe
+        # Add additional context if exists
         if context:
             if context.last_cars_recommended:
                 initial_state["last_cars_recommended"] = context.last_cars_recommended
             if context.selected_car:
                 initial_state["selected_car"] = context.selected_car
 
-        # Configurar thread_id para mantener la conversación
+        # Configure thread_id to maintain conversation
         config: RunnableConfig = {
             "configurable": {"thread_id": phone_number}
         }
 
         try:
-            # Ejecutar el agente
+            # Execute the agent
             result = await self.agent.ainvoke(initial_state, config)
 
-            # Obtener la última respuesta del agente
+            # Get the last response from the agent
             messages = result.get("messages", [])
             if messages:
                 last_message = messages[-1]
@@ -96,5 +97,5 @@ class ChatService:
             return response
 
         except Exception as e:
-            # En caso de error, intentar dar una respuesta amigable
+            # In case of error, try to give a friendly response
             return "Lo siento, tuve un problema procesando tu mensaje. ¿Podrías intentar de nuevo?"

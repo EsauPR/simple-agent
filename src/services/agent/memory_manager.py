@@ -9,20 +9,20 @@ from src.config import settings
 
 @dataclass
 class SessionContext:
-    """Contexto adicional de la sesión (autos recomendados, auto seleccionado)"""
+    """Additional session context (recommended cars, selected car)"""
     last_cars_recommended: List[Dict[str, Any]] = field(default_factory=list)
     selected_car: Optional[Dict[str, Any]] = None
     last_activity: datetime = field(default_factory=datetime.now)
 
 
 class CustomAgentState(AgentState):
-    """Estado personalizado del agente con contexto adicional"""
+    """Custom agent state with additional context"""
     last_cars_recommended: List[Dict[str, Any]] = []
     selected_car: Optional[Dict[str, Any]] = None
 
 
 class MemoryManager:
-    """Gestiona instancias de checkpointer y contexto adicional por número de teléfono"""
+    """Manages checkpointer instances and additional context by phone number"""
 
     def __init__(self):
         self.checkpointer = InMemorySaver()
@@ -31,11 +31,11 @@ class MemoryManager:
         self._ttl_hours = settings.SESSION_TTL_HOURS
 
     def get_checkpointer(self):
-        """Retorna el checkpointer para usar con el agente"""
+        """Returns the checkpointer to use with the agent"""
         return self.checkpointer
 
     def get_context(self, phone_number: str) -> Optional[SessionContext]:
-        """Obtiene el contexto adicional de la sesión"""
+        """Get additional session context"""
         context = self._contexts.get(phone_number)
         if context:
             context.last_activity = datetime.now()
@@ -47,7 +47,7 @@ class MemoryManager:
         last_cars_recommended: Optional[List[Dict[str, Any]]] = None,
         selected_car: Optional[Dict[str, Any]] = None
     ) -> None:
-        """Actualiza el contexto adicional de la sesión"""
+        """Update additional session context"""
         if phone_number not in self._contexts:
             self._contexts[phone_number] = SessionContext()
 
@@ -62,15 +62,15 @@ class MemoryManager:
         context.last_activity = datetime.now()
 
     def clear_memory(self, phone_number: str) -> None:
-        """Limpia la memoria de un usuario"""
-        # Limpiar contexto adicional
+        """Clear user memory"""
+        # Clear additional context
         if phone_number in self._contexts:
             del self._contexts[phone_number]
-        # El checkpointer mantiene el estado, pero podemos limpiarlo si es necesario
-        # Por ahora, dejamos que el TTL lo maneje
+        # The checkpointer maintains state, but we can clear it if needed
+        # For now, let TTL handle it
 
     async def cleanup_inactive_memories(self) -> int:
-        """Elimina memorias inactivas (más antiguas que TTL)"""
+        """Remove inactive memories (older than TTL)"""
         now = datetime.now()
         threshold = now - timedelta(hours=self._ttl_hours)
 
@@ -86,14 +86,14 @@ class MemoryManager:
             return len(to_delete)
 
     def get_memory_as_dict(self, phone_number: str) -> Optional[dict]:
-        """Obtiene la memoria como diccionario (para API/debug)"""
+        """Get memory as dictionary (for API/debug)"""
         from langchain_core.messages import HumanMessage
 
         context = self._contexts.get(phone_number)
 
-        # Intentar obtener mensajes del checkpointer
-        # Nota: Esto requiere acceso al estado guardado, que puede no estar disponible directamente
-        # Por ahora, retornamos el contexto adicional
+        # Try to get messages from checkpointer
+        # Note: This requires access to saved state, which may not be directly available
+        # For now, return additional context
         return {
             "phone_number": phone_number,
             "context": {

@@ -43,10 +43,10 @@ def normalize_text(text: str) -> str:
     if not text:
         return ""
 
-    # Convertir a lowercase
+    # Convert to lowercase
     text = text.lower().strip()
 
-    # Remover acentos básicos (puede expandirse)
+    # Remove basic accents (can be expanded)
     replacements = {
         "á": "a", "é": "e", "í": "i", "ó": "o", "ú": "u",
         "ñ": "n"

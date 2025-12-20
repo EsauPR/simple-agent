@@ -40,7 +40,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             logger.error(
                 f"Request failed: {request.method} {request.url.path} "
                 f"error={str(e)} process_time={process_time:.4f}s",
-                exc_info=True
+                exc_info=False
             )
 
             raise

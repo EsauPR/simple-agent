@@ -75,23 +75,26 @@ def create_search_cars_tool(db: AsyncSession):
         if not cars:
             return "No encontré autos que coincidan con esas preferencias. Intenta con otros criterios."
 
-        # Guardar en contexto para referencias futuras
+        # Convertir DTOs a diccionarios para el memory_manager
+        cars_dict = [car.model_dump() for car in cars]
+
+        # Save in context for future references
         if runtime:
-            # Obtener thread_id del config
+            # Get thread_id from config
             thread_id = runtime.config.get("configurable", {}).get("thread_id") if runtime.config else None
             if thread_id:
-                memory_manager.update_context(thread_id, last_cars_recommended=cars)
-                # También actualizar el estado del agente si está disponible
+                memory_manager.update_context(thread_id, last_cars_recommended=cars_dict)
+                # Also update agent state if available
                 if hasattr(runtime, 'state') and runtime.state:
-                    runtime.state["last_cars_recommended"] = cars
+                    runtime.state["last_cars_recommended"] = cars_dict
 
         # Formatear resultados
         result_lines = ["Encontré los siguientes autos disponibles:\n"]
         for i, car in enumerate(cars, 1):
             result_lines.append(
-                f"{i}. {car['make']} {car['model']} {car['year']} "
-                f"(Stock ID: {car['stock_id']}, Precio: ${car['price']:,.0f}, "
-                f"KM: {car['km']:,})"
+                f"{i}. {car.make} {car.model} {car.year} "
+                f"(Stock ID: {car.stock_id}, Precio: ${float(car.price):,.0f}, "
+                f"KM: {car.km:,})"
             )
 
         return "\n".join(result_lines)
@@ -111,37 +114,59 @@ def create_calculate_financing_tool():
         """Calcula planes de financiamiento para un auto.
         Usa esta herramienta cuando el usuario pregunte por mensualidades, financiamiento, o pagos mensuales.
         Necesitas el precio del auto y el enganche. La tasa de interés es 10% anual fija.
-        Calcula plazos de 36, 48, 60 y 72 meses (3, 4, 5 y 6 años).
+
+        IMPORTANTE: Los plazos disponibles son SOLO 3, 4, 5 o 6 años. Esta herramienta calcula automáticamente
+        todos los plazos válidos (3, 4, 5, 6 años) y muestra las opciones al usuario.
+
+        Si el usuario menciona un plazo diferente a 3, 4, 5 o 6 años, NO uses esta herramienta.
+        En su lugar, informa al usuario que solo se ofrecen plazos de 3, 4, 5 o 6 años y pídele que elija uno válido.
         """
         from src.services.financing_service import FinancingService
 
         financing_service = FinancingService()
+        car_price_decimal = Decimal(str(car_price))
+        down_payment_decimal = Decimal(str(down_payment))
 
-        plans = financing_service.calculate_financing_plans(
-            car_price=Decimal(str(car_price)),
-            down_payment=Decimal(str(down_payment))
-        )
+        if down_payment_decimal >= car_price_decimal:
+            return "No se pudieron calcular los planes de financiamiento. El enganche debe ser menor al precio del auto."
+
+        financed_amount = car_price_decimal - down_payment_decimal
+        plans = []
+
+        # Calculate plans for all available terms (3, 4, 5, 6 years)
+        for years in [3, 4, 5, 6]:
+            try:
+                plan = financing_service.calculate_financing_plan(
+                    car_price=car_price_decimal,
+                    down_payment=down_payment_decimal,
+                    years=years
+                )
+                plans.append(plan)
+            except ValueError:
+                continue
 
         if not plans:
             return "No se pudieron calcular los planes de financiamiento. Verifica que el enganche sea menor al precio del auto."
 
-        financed_amount = Decimal(str(car_price)) - Decimal(str(down_payment))
-
         result_lines = [
-            "Planes de financiamiento:",
+            "Planes de financiamiento disponibles:",
             f"- Precio del auto: ${car_price:,.0f}",
             f"- Enganche: ${down_payment:,.0f}",
             f"- Monto a financiar: ${float(financed_amount):,.0f}",
             "- Tasa de interés: 10% anual",
-            "\nOpciones de pago mensual:"
+            "\nOpciones de pago mensual (plazos disponibles: 3, 4, 5 o 6 años):"
         ]
 
         for plan in plans:
-            years = plan.months // 12
             result_lines.append(
-                f"- {plan.months} meses ({years} años): ${plan.monthly_payment:,.2f}/mes "
+                f"- {plan.months} meses ({plan.years} años): ${plan.monthly_payment:,.2f}/mes "
                 f"(Total: ${plan.total_amount:,.2f})"
             )
+
+        result_lines.append(
+            "\nNota: Los plazos disponibles son únicamente 3, 4, 5 o 6 años. "
+            "Si deseas calcular un plazo específico, por favor elige uno de estos plazos válidos."
+        )
 
         return "\n".join(result_lines)
 
@@ -172,7 +197,7 @@ def create_search_knowledge_base_tool(db: AsyncSession):
                 return "No encontré información específica sobre eso en mi base de conocimiento."
 
             # Combinar contenido relevante
-            context = "\n\n".join([chunk["content"] for chunk in similar_chunks])
+            context = "\n\n".join([chunk.content for chunk in similar_chunks])
             return f"Información encontrada sobre Kavak:\n\n{context}"
 
         except Exception:
@@ -200,17 +225,18 @@ def create_get_car_details_tool(db: AsyncSession):
         car_service = CarService(db)
         car = None
 
-        # Si hay referencia contextual, buscar en el estado del agente o contexto
+        # If there's a contextual reference, search in agent state or context
+        car_dict = None
         if reference and runtime:
-            # Primero intentar desde el estado del agente
+            # First try from agent state
             if hasattr(runtime, 'state') and runtime.state:
                 if runtime.state.get("selected_car"):
-                    car = runtime.state["selected_car"]
+                    car_dict = runtime.state["selected_car"]
                 elif runtime.state.get("last_cars_recommended"):
-                    car = runtime.state["last_cars_recommended"][0]
+                    car_dict = runtime.state["last_cars_recommended"][0]
 
-            # Si no está en el estado, buscar en el contexto adicional
-            if not car:
+            # If not in state, search in additional context
+            if not car_dict:
                 thread_id = runtime.config.get("configurable", {}).get("thread_id") if runtime.config else None
                 if thread_id:
                     context = memory_manager.get_context(thread_id)
@@ -218,37 +244,49 @@ def create_get_car_details_tool(db: AsyncSession):
                         ref_lower = reference.lower()
                         if any(r in ref_lower for r in ["ese auto", "el anterior", "ese", "el primero", "el que me dijiste"]):
                             if context.selected_car:
-                                car = context.selected_car
+                                car_dict = context.selected_car
                             elif context.last_cars_recommended:
-                                car = context.last_cars_recommended[0]
+                                car_dict = context.last_cars_recommended[0]
 
-        # Si hay stock_id, buscar directamente
-        if not car and stock_id:
-            car = await car_service.get_car_by_stock_id(stock_id)
+        # If there's stock_id, search directly
+        car = None
+        if not car_dict and stock_id:
+            from src.repositories.car_repository import CarRepository
+            from src.schemas.car import CarResponse
+            car_repo = CarRepository(db)
+            car_model = await car_repo.get_by_stock_id(stock_id)
+            if car_model:
+                car = CarResponse.model_validate(car_model)
+
+        # If we have a dictionary from context, convert it to DTO
+        if car_dict and not car:
+            from src.schemas.car import CarResponse
+            car = CarResponse.model_validate(car_dict)
 
         if not car:
             return "No encontré el auto especificado. Por favor proporciona el Stock ID o busca autos primero."
 
-        # Guardar como auto seleccionado
+        # Save as selected car (convert to dict for memory_manager)
+        car_dict = car.model_dump()
         if runtime:
             thread_id = runtime.config.get("configurable", {}).get("thread_id") if runtime.config else None
             if thread_id:
-                memory_manager.update_context(thread_id, selected_car=car)
-            # También actualizar el estado del agente si está disponible
+                memory_manager.update_context(thread_id, selected_car=car_dict)
+            # Also update agent state if available
             if hasattr(runtime, 'state') and runtime.state:
-                runtime.state["selected_car"] = car
+                runtime.state["selected_car"] = car_dict
 
         return (
             f"Detalles del auto:\n"
-            f"- Marca: {car['make']}\n"
-            f"- Modelo: {car['model']}\n"
-            f"- Año: {car['year']}\n"
-            f"- Precio: ${car['price']:,.0f}\n"
-            f"- Kilometraje: {car['km']:,} km\n"
-            f"- Versión: {car.get('version', 'N/A')}\n"
-            f"- Stock ID: {car['stock_id']}\n"
-            f"- Bluetooth: {'Sí' if car.get('bluetooth') else 'No'}\n"
-            f"- CarPlay: {'Sí' if car.get('car_play') else 'No'}"
+            f"- Marca: {car.make}\n"
+            f"- Modelo: {car.model}\n"
+            f"- Año: {car.year}\n"
+            f"- Precio: ${float(car.price):,.0f}\n"
+            f"- Kilometraje: {car.km:,} km\n"
+            f"- Versión: {car.version or 'N/A'}\n"
+            f"- Stock ID: {car.stock_id}\n"
+            f"- Bluetooth: {'Sí' if car.bluetooth else 'No'}\n"
+            f"- CarPlay: {'Sí' if car.car_play else 'No'}"
         )
 
     return get_car_details

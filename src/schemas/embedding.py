@@ -32,3 +32,18 @@ class ScrapeResponse(BaseModel):
     message: str
     embeddings_created: int
     embeddings_deleted: int
+
+
+class EmbeddingSearchResult(BaseModel):
+    """DTO for embedding search results"""
+    id: UUID
+    content: str
+    source_url: str
+    metadata: Optional[dict] = None
+
+
+class ScrapeResult(BaseModel):
+    """DTO for scrape and store operation result"""
+    embeddings_created: int
+    embeddings_deleted: int
+    chunks_processed: int

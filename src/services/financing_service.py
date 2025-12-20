@@ -1,5 +1,5 @@
 from decimal import Decimal
-from typing import List, Optional
+from typing import Optional
 from math import pow
 from src.config import settings
 from src.schemas.financing import FinancingPlan
@@ -16,22 +16,22 @@ class FinancingService:
         annual_rate: Decimal,
         months: int
     ) -> Decimal:
-        """Calcula el pago mensual usando la fórmula de interés compuesto"""
+        """Calculate the monthly payment using the compound interest formula"""
         if principal <= 0:
             return Decimal("0")
 
         if months <= 0:
             return Decimal("0")
 
-        # Tasa mensual
+        # Monthly rate
         monthly_rate = annual_rate / Decimal("12")
 
-        # Si la tasa es 0, simplemente dividir principal entre meses
+        # If the rate is 0, simply divide the principal by the months
         if monthly_rate == 0:
             return principal / Decimal(str(months))
 
-        # Fórmula: P = (P * r * (1 + r)^n) / ((1 + r)^n - 1)
-        # Donde P = principal, r = tasa mensual, n = número de meses
+        # Formula: P = (P * r * (1 + r)^n) / ((1 + r)^n - 1)
+        # Where P = principal, r = monthly rate, n = number of months
 
         one_plus_rate = Decimal("1") + monthly_rate
         one_plus_rate_power = Decimal(str(pow(float(one_plus_rate), months)))
@@ -46,51 +46,44 @@ class FinancingService:
 
         return monthly_payment.quantize(Decimal("0.01"))
 
-    def calculate_financing_plans(
+    def calculate_financing_plan(
         self,
         car_price: Decimal,
         down_payment: Decimal,
-        interest_rate: Optional[Decimal] = None,
-        min_months: int = 36,
-        max_months: int = 72
-    ) -> List[FinancingPlan]:
-        """Calcula planes de financiamiento para diferentes plazos"""
+        years: int,
+        interest_rate: Optional[Decimal] = None
+    ) -> FinancingPlan:
+        """Calculate a financing plan for the given years"""
         if interest_rate is None:
             interest_rate = self.interest_rate
 
-        # Monto financiado
+        # Validate years
+        if years not in [3, 4, 5, 6]:
+            raise ValueError("El plazo debe ser 3, 4, 5 o 6 años")
+
+        # Financed amount
         financed_amount = car_price - down_payment
 
         if financed_amount <= 0:
-            return []
+            raise ValueError("El enganche no puede ser mayor o igual al precio del vehículo")
 
-        plans = []
+        # Convert years to months
+        months = years * 12
 
-        # Plazos estándar: 36, 48, 60, 72 meses (3, 4, 5, 6 años)
-        available_months = [36, 48, 60, 72]
+        # Calculate monthly payment
+        monthly_payment = self.calculate_monthly_payment(
+            financed_amount,
+            interest_rate,
+            months
+        )
 
-        # Filtrar por min y max
-        available_months = [m for m in available_months if min_months <= m <= max_months]
+        total_amount = monthly_payment * Decimal(str(months))
+        interest_amount = total_amount - financed_amount
 
-        for months in available_months:
-            monthly_payment = self.calculate_monthly_payment(
-                financed_amount,
-                interest_rate,
-                months
-            )
-
-            total_amount = monthly_payment * Decimal(str(months))
-            interest_amount = total_amount - financed_amount
-
-            plans.append(FinancingPlan(
-                months=months,
-                monthly_payment=monthly_payment,
-                total_amount=total_amount.quantize(Decimal("0.01")),
-                interest_amount=interest_amount.quantize(Decimal("0.01"))
-            ))
-
-        return plans
-
-    def get_default_down_payment(self, car_price: Decimal) -> Decimal:
-        """Calcula el enganche por defecto (10% del precio)"""
-        return (car_price * self.default_down_payment_percent).quantize(Decimal("0.01"))
+        return FinancingPlan(
+            years=years,
+            months=months,
+            monthly_payment=monthly_payment,
+            total_amount=total_amount.quantize(Decimal("0.01")),
+            interest_amount=interest_amount.quantize(Decimal("0.01"))
+        )

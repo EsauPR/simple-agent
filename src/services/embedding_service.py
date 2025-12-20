@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.agent.llm_service import llm_service
 from src.services.scraping_service import scraping_service
 from src.repositories.embedding_repository import EmbeddingRepository
+from src.schemas.embedding import EmbeddingSearchResult, ScrapeResult
 from src.config import settings
 
 
@@ -26,7 +27,7 @@ class EmbeddingService:
         query: str,
         limit: int = None,
         source_url: Optional[str] = None
-    ) -> List[dict]:
+    ) -> List[EmbeddingSearchResult]:
         """Search for similar content using embeddings"""
         if limit is None:
             limit = settings.RAG_TOP_K
@@ -42,12 +43,12 @@ class EmbeddingService:
         )
 
         return [
-            {
-                "id": str(result.id),
-                "content": result.content,
-                "source_url": result.source_url,
-                "metadata": result.metadata_json
-            }
+            EmbeddingSearchResult(
+                id=result.id,
+                content=result.content,
+                source_url=result.source_url,
+                metadata=result.metadata_json if isinstance(result.metadata_json, dict) else None
+            )
             for result in results
         ]
 
@@ -55,17 +56,17 @@ class EmbeddingService:
         self,
         url: str,
         force_update: bool = False
-    ) -> dict:
+    ) -> ScrapeResult:
         """Scrape an URL, generate embeddings and store them"""
-        # Si force_update, eliminar embeddings existentes
+        # If force_update, delete existing embeddings
         deleted_count = 0
         if force_update:
             deleted_count = await self.embedding_repo.delete_by_source_url(url)
 
-        # Scrape and chunk
+        # Scrape and chunk the URL
         chunks = await scraping_service.scrape_and_chunk(url)
 
-        # Generate and store embeddings
+        # Generate and store the embeddings
         created_count = 0
         for i, chunk in enumerate(chunks):
             metadata = {
@@ -76,8 +77,8 @@ class EmbeddingService:
             await self.generate_and_store_embedding(chunk, url, metadata)
             created_count += 1
 
-        return {
-            "embeddings_created": created_count,
-            "embeddings_deleted": deleted_count,
-            "chunks_processed": len(chunks)
-        }
+        return ScrapeResult(
+            embeddings_created=created_count,
+            embeddings_deleted=deleted_count,
+            chunks_processed=len(chunks)
+        )

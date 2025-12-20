@@ -16,11 +16,11 @@ class EmbeddingRepository:
         embedding: List[float],
         metadata: Optional[dict] = None
     ) -> KnowledgeBase:
-        """Crea un nuevo embedding"""
+        """Create a new embedding"""
         kb = KnowledgeBase(
             content=content,
             source_url=source_url,
-            embedding=embedding,  # pgvector manejará la conversión
+            embedding=embedding,  # pgvector will handle the conversion
             metadata_json=metadata
         )
         self.db.add(kb)
@@ -29,14 +29,14 @@ class EmbeddingRepository:
         return kb
 
     async def get_by_id(self, embedding_id: UUID) -> Optional[KnowledgeBase]:
-        """Obtiene un embedding por ID"""
+        """Get an embedding by ID"""
         result = await self.db.execute(
             select(KnowledgeBase).where(KnowledgeBase.id == embedding_id)
         )
         return result.scalar_one_or_none()
 
     async def get_by_source_url(self, source_url: str) -> List[KnowledgeBase]:
-        """Obtiene todos los embeddings de una URL"""
+        """Get all embeddings from a URL"""
         result = await self.db.execute(
             select(KnowledgeBase).where(KnowledgeBase.source_url == source_url)
         )

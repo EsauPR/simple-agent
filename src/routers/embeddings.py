@@ -24,9 +24,9 @@ async def scrape_and_store(
         )
 
         return ScrapeResponse(
-            message=f"Successfully scraped and created {result['embeddings_created']} embeddings",
-            embeddings_created=result["embeddings_created"],
-            embeddings_deleted=result["embeddings_deleted"]
+            message=f"Successfully scraped and created {result.embeddings_created} embeddings",
+            embeddings_created=result.embeddings_created,
+            embeddings_deleted=result.embeddings_deleted
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

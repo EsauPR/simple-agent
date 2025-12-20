@@ -27,10 +27,10 @@ class ScrapingService:
         for script in soup(["script", "style", "meta", "link"]):
             script.decompose()
 
-        # Extraer texto
+        # Extract text
         text = soup.get_text()
 
-        # Limpiar espacios y saltos de línea
+        # Clean spaces and line breaks
         lines = (line.strip() for line in text.splitlines())
         chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
         text = ' '.join(chunk for chunk in chunks if chunk)
@@ -51,9 +51,9 @@ class ScrapingService:
         while start < len(text):
             end = start + self.chunk_size
 
-            # Si no es el último chunk, intentar cortar en un punto o espacio
+            # If not the last chunk, try to cut at a period or space
             if end < len(text):
-                # Buscar último punto o espacio cercano
+                # Find last period or space nearby
                 last_period = text.rfind('.', start, end)
                 last_space = text.rfind(' ', start, end)
 
@@ -66,7 +66,7 @@ class ScrapingService:
             if chunk:
                 chunks.append(chunk)
 
-            # Mover start con overlap
+            # Move start with overlap
             start = end - self.chunk_overlap
             if start < 0:
                 start = 0
