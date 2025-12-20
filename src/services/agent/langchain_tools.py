@@ -1,0 +1,264 @@
+from typing import Optional, Type, Any, List
+from decimal import Decimal
+from pydantic import BaseModel, Field
+from langchain.tools import BaseTool, tool, ToolRuntime
+from sqlalchemy.ext.asyncio import AsyncSession
+import asyncio
+
+
+# ============ Input Schemas ============
+
+class SearchCarsInput(BaseModel):
+    """Input para buscar autos en el catálogo"""
+    make: Optional[str] = Field(None, description="Marca del auto (ej: Toyota, Honda, BMW)")
+    model: Optional[str] = Field(None, description="Modelo del auto (ej: Corolla, Civic, X5)")
+    min_year: Optional[int] = Field(None, description="Año mínimo del auto")
+    max_year: Optional[int] = Field(None, description="Año máximo del auto")
+    min_price: Optional[float] = Field(None, description="Precio mínimo en pesos")
+    max_price: Optional[float] = Field(None, description="Precio máximo en pesos")
+    limit: int = Field(5, description="Número máximo de resultados")
+
+
+class CalculateFinancingInput(BaseModel):
+    """Input para calcular financiamiento"""
+    car_price: float = Field(..., description="Precio del auto en pesos")
+    down_payment: float = Field(..., description="Enganche en pesos")
+    stock_id: Optional[str] = Field(None, description="Stock ID del auto (opcional)")
+
+
+class SearchKnowledgeBaseInput(BaseModel):
+    """Input para buscar en la base de conocimiento"""
+    query: str = Field(..., description="Pregunta o consulta sobre Kavak")
+
+
+class GetCarDetailsInput(BaseModel):
+    """Input para obtener detalles de un auto"""
+    stock_id: Optional[str] = Field(None, description="Stock ID del auto")
+    reference: Optional[str] = Field(None, description="Referencia contextual como 'ese auto', 'el anterior'")
+
+
+# ============ Tools ============
+
+def create_search_cars_tool(db: AsyncSession):
+    """Crea la tool para buscar autos"""
+
+    @tool
+    async def search_cars(
+        make: Optional[str] = None,
+        model: Optional[str] = None,
+        min_year: Optional[int] = None,
+        max_year: Optional[int] = None,
+        min_price: Optional[float] = None,
+        max_price: Optional[float] = None,
+        limit: int = 5,
+        runtime: ToolRuntime = None  # Hidden parameter, not shown to model
+    ) -> str:
+        """Busca autos en el catálogo de Kavak basado en preferencias del cliente.
+        Usa esta herramienta cuando el usuario quiera recomendaciones de autos o busque un auto específico.
+        Puedes filtrar por marca, modelo, año y precio.
+        """
+        from src.services.car_service import CarService
+        from src.services.agent.memory_manager import memory_manager
+
+        car_service = CarService(db)
+
+        cars = await car_service.search_cars(
+            make=make,
+            model=model,
+            min_year=min_year,
+            max_year=max_year,
+            min_price=Decimal(str(min_price)) if min_price else None,
+            max_price=Decimal(str(max_price)) if max_price else None,
+            limit=limit
+        )
+
+        if not cars:
+            return "No encontré autos que coincidan con esas preferencias. Intenta con otros criterios."
+
+        # Guardar en contexto para referencias futuras
+        if runtime:
+            # Obtener thread_id del config
+            thread_id = runtime.config.get("configurable", {}).get("thread_id") if runtime.config else None
+            if thread_id:
+                memory_manager.update_context(thread_id, last_cars_recommended=cars)
+                # También actualizar el estado del agente si está disponible
+                if hasattr(runtime, 'state') and runtime.state:
+                    runtime.state["last_cars_recommended"] = cars
+
+        # Formatear resultados
+        result_lines = ["Encontré los siguientes autos disponibles:\n"]
+        for i, car in enumerate(cars, 1):
+            result_lines.append(
+                f"{i}. {car['make']} {car['model']} {car['year']} "
+                f"(Stock ID: {car['stock_id']}, Precio: ${car['price']:,.0f}, "
+                f"KM: {car['km']:,})"
+            )
+
+        return "\n".join(result_lines)
+
+    return search_cars
+
+
+def create_calculate_financing_tool():
+    """Crea la tool para calcular financiamiento"""
+
+    @tool
+    def calculate_financing(
+        car_price: float,
+        down_payment: float,
+        stock_id: Optional[str] = None
+    ) -> str:
+        """Calcula planes de financiamiento para un auto.
+        Usa esta herramienta cuando el usuario pregunte por mensualidades, financiamiento, o pagos mensuales.
+        Necesitas el precio del auto y el enganche. La tasa de interés es 10% anual fija.
+        Calcula plazos de 36, 48, 60 y 72 meses (3, 4, 5 y 6 años).
+        """
+        from src.services.financing_service import FinancingService
+
+        financing_service = FinancingService()
+
+        plans = financing_service.calculate_financing_plans(
+            car_price=Decimal(str(car_price)),
+            down_payment=Decimal(str(down_payment))
+        )
+
+        if not plans:
+            return "No se pudieron calcular los planes de financiamiento. Verifica que el enganche sea menor al precio del auto."
+
+        financed_amount = Decimal(str(car_price)) - Decimal(str(down_payment))
+
+        result_lines = [
+            "Planes de financiamiento:",
+            f"- Precio del auto: ${car_price:,.0f}",
+            f"- Enganche: ${down_payment:,.0f}",
+            f"- Monto a financiar: ${float(financed_amount):,.0f}",
+            "- Tasa de interés: 10% anual",
+            "\nOpciones de pago mensual:"
+        ]
+
+        for plan in plans:
+            years = plan.months // 12
+            result_lines.append(
+                f"- {plan.months} meses ({years} años): ${plan.monthly_payment:,.2f}/mes "
+                f"(Total: ${plan.total_amount:,.2f})"
+            )
+
+        return "\n".join(result_lines)
+
+    return calculate_financing
+
+
+def create_search_knowledge_base_tool(db: AsyncSession):
+    """Crea la tool para buscar en la base de conocimiento"""
+
+    @tool
+    async def search_kavak_info(query: str) -> str:
+        """Busca información sobre Kavak, sus servicios, ubicaciones, propuesta de valor, etc.
+        Usa esta herramienta cuando el usuario pregunte sobre qué es Kavak, dónde están ubicados,
+        qué servicios ofrecen, o cualquier información general sobre la empresa.
+        """
+        from src.services.embedding_service import EmbeddingService
+        from src.config import settings
+
+        embedding_service = EmbeddingService(db)
+
+        try:
+            similar_chunks = await embedding_service.search_similar(
+                query,
+                limit=settings.RAG_TOP_K
+            )
+
+            if not similar_chunks:
+                return "No encontré información específica sobre eso en mi base de conocimiento."
+
+            # Combinar contenido relevante
+            context = "\n\n".join([chunk["content"] for chunk in similar_chunks])
+            return f"Información encontrada sobre Kavak:\n\n{context}"
+
+        except Exception:
+            return "No pude buscar información en este momento. Por favor intenta de nuevo."
+
+    return search_kavak_info
+
+
+def create_get_car_details_tool(db: AsyncSession):
+    """Crea la tool para obtener detalles de un auto"""
+
+    @tool
+    async def get_car_details(
+        stock_id: Optional[str] = None,
+        reference: Optional[str] = None,
+        runtime: ToolRuntime = None  # Hidden parameter, not shown to model
+    ) -> str:
+        """Obtiene detalles completos de un auto específico.
+        Usa esta herramienta cuando necesites información de un auto por su Stock ID,
+        o cuando el usuario haga referencia a 'ese auto', 'el anterior', 'el primero', etc.
+        """
+        from src.services.car_service import CarService
+        from src.services.agent.memory_manager import memory_manager
+
+        car_service = CarService(db)
+        car = None
+
+        # Si hay referencia contextual, buscar en el estado del agente o contexto
+        if reference and runtime:
+            # Primero intentar desde el estado del agente
+            if hasattr(runtime, 'state') and runtime.state:
+                if runtime.state.get("selected_car"):
+                    car = runtime.state["selected_car"]
+                elif runtime.state.get("last_cars_recommended"):
+                    car = runtime.state["last_cars_recommended"][0]
+
+            # Si no está en el estado, buscar en el contexto adicional
+            if not car:
+                thread_id = runtime.config.get("configurable", {}).get("thread_id") if runtime.config else None
+                if thread_id:
+                    context = memory_manager.get_context(thread_id)
+                    if context:
+                        ref_lower = reference.lower()
+                        if any(r in ref_lower for r in ["ese auto", "el anterior", "ese", "el primero", "el que me dijiste"]):
+                            if context.selected_car:
+                                car = context.selected_car
+                            elif context.last_cars_recommended:
+                                car = context.last_cars_recommended[0]
+
+        # Si hay stock_id, buscar directamente
+        if not car and stock_id:
+            car = await car_service.get_car_by_stock_id(stock_id)
+
+        if not car:
+            return "No encontré el auto especificado. Por favor proporciona el Stock ID o busca autos primero."
+
+        # Guardar como auto seleccionado
+        if runtime:
+            thread_id = runtime.config.get("configurable", {}).get("thread_id") if runtime.config else None
+            if thread_id:
+                memory_manager.update_context(thread_id, selected_car=car)
+            # También actualizar el estado del agente si está disponible
+            if hasattr(runtime, 'state') and runtime.state:
+                runtime.state["selected_car"] = car
+
+        return (
+            f"Detalles del auto:\n"
+            f"- Marca: {car['make']}\n"
+            f"- Modelo: {car['model']}\n"
+            f"- Año: {car['year']}\n"
+            f"- Precio: ${car['price']:,.0f}\n"
+            f"- Kilometraje: {car['km']:,} km\n"
+            f"- Versión: {car.get('version', 'N/A')}\n"
+            f"- Stock ID: {car['stock_id']}\n"
+            f"- Bluetooth: {'Sí' if car.get('bluetooth') else 'No'}\n"
+            f"- CarPlay: {'Sí' if car.get('car_play') else 'No'}"
+        )
+
+    return get_car_details
+
+
+def create_tools(db: AsyncSession, phone_number: Optional[str] = None) -> List[BaseTool]:
+    """Crea las herramientas para el agente"""
+    return [
+        create_search_cars_tool(db),
+        create_calculate_financing_tool(),
+        create_search_knowledge_base_tool(db),
+        create_get_car_details_tool(db),
+    ]
