@@ -1,0 +1,33 @@
+meta {
+  name: create car
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{url}}/api/v1/cars
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "stock_id": "234423",
+    "km": 75000,
+    "price": 255000,
+    "make": "Custom",
+    "model": "V1",
+    "year": 2026,
+    "version": "2.0",
+    "bluetooth": true,
+    "length": 12344,
+    "width": 12344,
+    "height": 12344,
+    "car_play": true
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

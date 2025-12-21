@@ -1,0 +1,23 @@
+meta {
+  name: scrape url
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{url}}/api/v1/embeddings/scrape
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "url": "https://www.kavak.com/mx/blog/sedes-de-kavak-en-mexico",
+    "force_update": false
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

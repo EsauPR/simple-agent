@@ -1,0 +1,37 @@
+meta {
+  name: update car
+  type: http
+  seq: 5
+}
+
+put {
+  url: {{url}}/api/v1/cars/:car_id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  car_id: 3897e244-c306-481c-b597-eea3b2bb74fc
+}
+
+body:json {
+  {
+    "stock_id": "234423",
+    "km": 75000,
+    "price": 255000,
+    "make": "Custom",
+    "model": "V1.0",
+    "year": 2026,
+    "version": "2.0",
+    "bluetooth": true,
+    "length": 12344,
+    "width": 12344,
+    "height": 12344,
+    "car_play": true
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

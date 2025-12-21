@@ -1,0 +1,35 @@
+meta {
+  name: create cars - bulk
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{url}}/api/v1/cars/bulk
+  body: json
+  auth: inherit
+}
+
+body:json {
+  [
+    {
+      "stock_id": "string",
+      "km": 0,
+      "price": 0,
+      "make": "string",
+      "model": "string",
+      "year": 0,
+      "version": "string",
+      "bluetooth": false,
+      "length": 0,
+      "width": 0,
+      "height": 0,
+      "car_play": false
+    }
+  ]
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
