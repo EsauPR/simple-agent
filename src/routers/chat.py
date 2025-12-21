@@ -43,8 +43,7 @@ async def twilio_webhook(
         url = str(request.url)
         signature = request.headers.get("X-Twilio-Signature", "")
         params = dict(await request.form())
-        logger.info("Validating Twilio signature")
-        if not validator.validate(url, params, signature):
+        if not validator.validate(url, params, signature) and not validator.validate(url.replace("http://", "https://"), params, signature):
             logger.error(f"Invalid Twilio signature: {url}, {params}, {signature}")
             raise HTTPException(status_code=403, detail="Invalid Twilio signature")
 
