@@ -23,3 +23,7 @@ db_username           = "kavak_user"
 
 # Note: db_username is sensitive and should be set via environment variable or terraform.tfvars (not committed)
 # Example: export TF_VAR_db_username=your_username
+
+# Bastion Host Configuration (for database access)
+# bastion_allowed_ip_cidr = "YOUR_IP/32"  # Your public IP address (e.g., 189.250.78.17/32)
+# bastion_key_pair_name = "your-key-pair-name"  # Optional: AWS Key Pair name for SSH access

@@ -1,0 +1,23 @@
+meta {
+  name: login
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{url}}/auth/login
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "client_id": "{{process.env.login_client}}",
+    "client_secret": "{{process.env.login_secret}}"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

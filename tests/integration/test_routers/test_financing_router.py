@@ -5,13 +5,15 @@ from decimal import Decimal
 
 from src.main import app
 from src.database.connection import get_db
+from src.dependencies.auth import auth
 from tests.fixtures.sample_data import get_sample_car_data
 
 
 @pytest.fixture
-def client(test_db, override_get_db):
-    """Create test client with overridden database"""
+def client(test_db, override_get_db, override_auth):
+    """Create test client with overridden database and auth"""
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[auth] = override_auth
     yield TestClient(app)
     app.dependency_overrides.clear()
 

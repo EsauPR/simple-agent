@@ -88,8 +88,8 @@ resource "aws_autoscaling_group" "ecs" {
   name                = "${var.project_name}-${var.environment}-ecs-asg"
   vpc_zone_identifier = var.private_subnet_ids
   min_size            = 1
-  max_size            = 5
-  desired_capacity    = 2
+  max_size            = 1
+  desired_capacity    = 1
 
   launch_template {
     id      = aws_launch_template.ecs.id
@@ -197,6 +197,30 @@ resource "aws_ecs_task_definition" "app" {
         {
           name      = "TWILIO_PHONE_NUMBER"
           valueFrom = "${var.twilio_secrets_arn}:PHONE_NUMBER::"
+        },
+        {
+          name      = "COGNITO_TOKEN_ENDPOINT"
+          valueFrom = "${var.cognito_secrets_arn}:TOKEN_ENDPOINT::"
+        },
+        {
+          name      = "COGNITO_USER_POOL_ID"
+          valueFrom = "${var.cognito_secrets_arn}:USER_POOL_ID::"
+        },
+        {
+          name      = "COGNITO_CLIENT_ID"
+          valueFrom = "${var.cognito_secrets_arn}:CLIENT_ID::"
+        },
+        {
+          name      = "COGNITO_CLIENT_SECRET"
+          valueFrom = "${var.cognito_secrets_arn}:CLIENT_SECRET::"
+        },
+        {
+          name      = "COGNITO_SCOPE"
+          valueFrom = "${var.cognito_secrets_arn}:SCOPE::"
+        },
+        {
+          name      = "COGNITO_REGION"
+          valueFrom = "${var.cognito_secrets_arn}:REGION::"
         }
       ]
 

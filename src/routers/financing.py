@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.connection import get_db
+from src.dependencies.auth import auth
 from src.services.financing_service import FinancingService
 from src.repositories.car_repository import CarRepository
 from src.schemas.financing import FinancingCalculationRequest, FinancingCalculationResponse
@@ -11,7 +12,8 @@ router = APIRouter(prefix="/financing", tags=["financing"])
 @router.post("/calculate", response_model=FinancingCalculationResponse)
 async def calculate_financing(
     request: FinancingCalculationRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(auth)
 ):
     """Calculate financing plan for a specific car and term"""
     financing_service = FinancingService()

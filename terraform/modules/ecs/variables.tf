@@ -73,6 +73,11 @@ variable "twilio_secrets_arn" {
   type        = string
 }
 
+variable "cognito_secrets_arn" {
+  description = "Cognito secrets ARN"
+  type        = string
+}
+
 variable "aws_region" {
   description = "AWS region"
   type        = string

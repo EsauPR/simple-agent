@@ -3,6 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.connection import get_db
+from src.dependencies.auth import auth
 from src.services.embedding_service import EmbeddingService
 from src.schemas.embedding import ScrapeRequest, ScrapeResponse, EmbeddingResponse
 
@@ -12,7 +13,8 @@ router = APIRouter(prefix="/embeddings", tags=["embeddings"])
 @router.post("/scrape", response_model=ScrapeResponse)
 async def scrape_and_store(
     request: ScrapeRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(auth)
 ):
     """Scrape an URL and store embeddings"""
     embedding_service = EmbeddingService(db)
@@ -35,7 +37,8 @@ async def scrape_and_store(
 @router.get("", response_model=List[EmbeddingResponse])
 async def list_embeddings(
     limit: int = 100,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(auth)
 ):
     """List embeddings"""
     from src.repositories.embedding_repository import EmbeddingRepository
@@ -48,7 +51,8 @@ async def list_embeddings(
 @router.delete("/{embedding_id}", status_code=204)
 async def delete_embedding(
     embedding_id: UUID,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(auth)
 ):
     """Delete an embedding"""
     from src.repositories.embedding_repository import EmbeddingRepository

@@ -38,6 +38,11 @@ output "twilio_secrets_arn" {
   value       = aws_secretsmanager_secret.twilio.arn
 }
 
+output "cognito_secrets_arn" {
+  description = "Cognito secrets ARN"
+  value       = aws_secretsmanager_secret.cognito.arn
+}
+
 output "db_password_secret_arn" {
   description = "Database password secret ARN"
   value       = aws_secretsmanager_secret.db_password.arn

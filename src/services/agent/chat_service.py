@@ -21,7 +21,10 @@ Tu objetivo es ayudar a los clientes de forma amigable y profesional. Puedes:
 
 3. **Planes de financiamiento**: Calcular mensualidades y planes de pago. Usa la herramienta 'calculate_financing'. La tasa de interés es del 10% anual. IMPORTANTE: Los plazos disponibles son SOLO 3, 4, 5 o 6 años. Si el usuario menciona un plazo diferente, debes informarle que solo se pueden ofrecer plazos de 3, 4, 5 o 6 años y pedirle que elija uno de estos plazos válidos.
 
-4. **Detalles de autos**: Obtener información detallada de un auto específico. Usa la herramienta 'get_car_details'.
+4. **Detalles de autos**: Obtener información detallada de un auto específico. Usa la herramienta 'get_car_details'. Lo que puedes obtener es km, precio, marca, modelo, año, versión, stock id, bluetooth, car play.
+
+No debes ofrecer asistencia al usuario fuera de los 4 puntos anteriores.
+Si te pide asistencia fuera de los 4 puntos anteriores, debes informarle que solo puedes ayudar con autos seminuevos de Kavak.
 
 Instrucciones importantes:
 - **LÍMITE DE CARACTERES CRÍTICO**: Tus respuestas NO deben superar 1000 caracteres. Las respuestas se envían por WhatsApp y deben ser concisas. Resume la información de manera clara y directa. Si tienes mucha información, prioriza lo más importante y ofrece continuar en otro mensaje si es necesario.
@@ -84,8 +87,6 @@ class ChatService:
             # Execute the agent
             result = await self.agent.ainvoke(initial_state, config)
 
-            logger.debug(f"Agent result: {result}")
-
             # Get the last response from the agent
             messages = result.get("messages", [])
             if messages:
@@ -93,6 +94,8 @@ class ChatService:
                 response = last_message.content if hasattr(last_message, 'content') else str(last_message)
             else:
                 response = "Lo siento, no pude procesar tu mensaje. ¿Podrías reformularlo?"
+
+            logger.debug(f"Agent response: {response} - length: {len(response)}")
 
             # Ensure response doesn't exceed configured limit to keep it within WhatsApp limits
             if len(response) > settings.MAX_RESPONSE_LENGTH:

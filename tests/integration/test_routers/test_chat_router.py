@@ -5,13 +5,15 @@ from unittest.mock import patch, AsyncMock
 
 from src.main import app
 from src.database.connection import get_db
+from src.dependencies.auth import auth
 from src.services.agent.chat_service import ChatService
 
 
 @pytest.fixture
-def client(test_db, override_get_db):
-    """Create test client with overridden database"""
+def client(test_db, override_get_db, override_auth):
+    """Create test client with overridden database and auth"""
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[auth] = override_auth
     yield TestClient(app)
     app.dependency_overrides.clear()
 
@@ -39,9 +41,9 @@ class TestChatRouter:
             mock_process.assert_called_once_with("+1234567890", "Hello")
 
     async def test_twilio_webhook_valid_signature(self, client: TestClient, test_db, mock_twilio_validator):
-        """Test Twilio webhook with valid signature"""
-        with patch.object(ChatService, 'process_message', new_callable=AsyncMock) as mock_process:
-            mock_process.return_value = "Test response"
+        """Test Twilio webhook with valid signature - enqueues message and returns 200"""
+        with patch('src.routers.chat.message_queue') as mock_queue:
+            mock_queue.enqueue_message = AsyncMock()
 
             form_data = {
                 "From": "whatsapp:+1234567890",
@@ -55,8 +57,8 @@ class TestChatRouter:
             )
 
             assert response.status_code == 200
-            assert "application/xml" in response.headers["content-type"]
-            assert "Test response" in response.text
+            # Verify message was enqueued
+            mock_queue.enqueue_message.assert_called_once_with("+1234567890", "Hello")
 
     async def test_twilio_webhook_invalid_signature(self, client: TestClient, test_db):
         """Test Twilio webhook with invalid signature"""
@@ -93,11 +95,11 @@ class TestChatRouter:
             assert response.status_code == 400
 
     async def test_twilio_webhook_response_format(self, client: TestClient, test_db):
-        """Test Twilio webhook response format"""
+        """Test Twilio webhook response format - returns 200 OK"""
         # Disable webhook secret validation for this test
         with patch("src.config.settings.TWILIO_WEBHOOK_SECRET", None), \
-             patch.object(ChatService, 'process_message', new_callable=AsyncMock) as mock_process:
-            mock_process.return_value = "Test response"
+             patch('src.routers.chat.message_queue') as mock_queue:
+            mock_queue.enqueue_message = AsyncMock()
 
             form_data = {
                 "From": "whatsapp:+1234567890",
@@ -107,6 +109,5 @@ class TestChatRouter:
             response = client.post("/api/v1/chat/webhooks/twilio", data=form_data)
 
             assert response.status_code == 200
-            assert "application/xml" in response.headers["content-type"]
-            # Should be TwiML format
-            assert "<?xml" in response.text or "<Response>" in response.text
+            # Verify message was enqueued
+            mock_queue.enqueue_message.assert_called_once_with("+1234567890", "Hello")

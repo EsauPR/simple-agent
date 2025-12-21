@@ -1,35 +1,45 @@
 from contextlib import asynccontextmanager
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from src.database.connection import init_db, close_db
-from src.routers import chat, cars, financing, embeddings
+from src.routers import chat, cars, financing, embeddings, auth
 from src.middleware import LoggingMiddleware
+from src.services.message_processor import message_processor
 from src.config import settings
 
+logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown"""
-    # Startup
-    print("Initializing database...")
+    logger.info("Initializing database...")
     await init_db()
-    print("Database initialized")
+    logger.info("Database initialized")
+
+    # Start message processor cron job
+    logger.info("Starting message processor...")
+    await message_processor.start()
+    logger.info("Message processor started")
 
     yield
 
-    # Shutdown
+    # Stop message processor cron job
+    logger.info("Stopping message processor...")
+    await message_processor.stop()
+    logger.info("Message processor stopped")
+
     await close_db()
-    print("Application shutdown")
+    logger.info("Application shutdown")
 
 
 app = FastAPI(
     title="Kavak Commercial Bot API",
     description="API for the Kavak Commercial Bot with WhatsApp integration and LangChain",
     version="0.0.1",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
-# Logging middleware (must be added before CORS)
 app.add_middleware(LoggingMiddleware)
 
 # CORS middleware
@@ -42,6 +52,7 @@ app.add_middleware(
 )
 
 # Include routers
+app.include_router(auth.router)
 app.include_router(cars.router, prefix=settings.API_V1_PREFIX)
 app.include_router(financing.router, prefix=settings.API_V1_PREFIX)
 app.include_router(embeddings.router, prefix=settings.API_V1_PREFIX)

@@ -5,12 +5,14 @@ from unittest.mock import patch, AsyncMock
 
 from src.main import app
 from src.database.connection import get_db
+from src.dependencies.auth import auth
 
 
 @pytest.fixture
-def client(test_db, override_get_db):
-    """Create test client with overridden database"""
+def client(test_db, override_get_db, override_auth):
+    """Create test client with overridden database and auth"""
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[auth] = override_auth
     yield TestClient(app)
     app.dependency_overrides.clear()
 

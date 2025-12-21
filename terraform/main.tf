@@ -180,6 +180,7 @@ module "ecs" {
   database_url_secret_arn   = module.security.database_url_secret_arn
   openai_api_key_secret_arn = module.security.openai_api_key_secret_arn
   twilio_secrets_arn        = module.security.twilio_secrets_arn
+  cognito_secrets_arn       = module.security.cognito_secrets_arn
   aws_region                = var.aws_region
   target_group_arn          = module.alb.target_group_arn
 

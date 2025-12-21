@@ -3,6 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.connection import get_db
+from src.dependencies.auth import auth
 from src.repositories.car_repository import CarRepository
 from src.schemas.car import CarCreate, CarUpdate, CarResponse, CarFilter
 from decimal import Decimal
@@ -21,7 +22,8 @@ async def list_cars(
     min_year: int = None,
     max_year: int = None,
     limit: int = 10,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(auth)
 ):
     """List cars with optional filters"""
     filters = CarFilter(
@@ -44,7 +46,8 @@ async def list_cars(
 @router.get("/{car_id}", response_model=CarResponse)
 async def get_car(
     car_id: UUID,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(auth)
 ):
     """Get a car by ID"""
     car_repo = CarRepository(db)
@@ -57,7 +60,8 @@ async def get_car(
 @router.post("", response_model=CarResponse, status_code=201)
 async def create_car(
     car_data: CarCreate,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(auth)
 ):
     """Create a new car"""
     car_repo = CarRepository(db)
@@ -74,7 +78,8 @@ async def create_car(
 async def update_car(
     car_id: UUID,
     car_data: CarUpdate,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(auth)
 ):
     """Update a car"""
     car_repo = CarRepository(db)
@@ -90,7 +95,8 @@ async def update_car(
 @router.delete("/{car_id}", status_code=204)
 async def delete_car(
     car_id: UUID,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(auth)
 ):
     """Delete a car"""
     car_repo = CarRepository(db)
@@ -105,7 +111,8 @@ async def delete_car(
 @router.post("/bulk", status_code=201)
 async def bulk_create_cars(
     cars_data: List[CarCreate],
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(auth)
 ):
     """Create multiple cars"""
     car_repo = CarRepository(db)

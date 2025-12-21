@@ -186,6 +186,21 @@ def override_get_db(test_db_session: AsyncSession):
 
 
 @pytest.fixture
+def override_auth():
+    """Override auth dependency to bypass authentication in tests"""
+    async def _auth():
+        # Return a mock user payload
+        return {
+            "sub": "test-user",
+            "client_id": "test-client-id",
+            "scope": "default-m2m-resource-server-lke1a1/read",
+            "exp": 9999999999,  # Far future expiration
+        }
+
+    return _auth
+
+
+@pytest.fixture
 def mock_runtime():
     """Mock ToolRuntime for langchain tools"""
     from unittest.mock import MagicMock

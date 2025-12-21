@@ -143,7 +143,8 @@ resource "aws_iam_role_policy" "ecs_execution" {
           aws_secretsmanager_secret.database_url.arn,
           aws_secretsmanager_secret.openai_api_key.arn,
           aws_secretsmanager_secret.twilio.arn,
-          aws_secretsmanager_secret.db_password.arn
+          aws_secretsmanager_secret.db_password.arn,
+          aws_secretsmanager_secret.cognito.arn
         ]
       }
     ]
@@ -221,5 +222,15 @@ resource "aws_secretsmanager_secret" "twilio" {
 
   tags = {
     Name = "${var.project_name}-${var.environment}-twilio-secrets"
+  }
+}
+
+# Secrets Manager - Cognito Secrets
+resource "aws_secretsmanager_secret" "cognito" {
+  name        = "${var.project_name}-${var.environment}-cognito-secrets"
+  description = "AWS Cognito configuration and credentials"
+
+  tags = {
+    Name = "${var.project_name}-${var.environment}-cognito-secrets"
   }
 }

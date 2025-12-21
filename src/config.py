@@ -46,4 +46,15 @@ class Settings:
     # API
     API_V1_PREFIX: str = "/api/v1"
 
+    # AWS Cognito
+    COGNITO_TOKEN_ENDPOINT: str = os.getenv("COGNITO_TOKEN_ENDPOINT","")
+    COGNITO_USER_POOL_ID: Optional[str] = os.getenv("COGNITO_USER_POOL_ID", None)
+    COGNITO_CLIENT_ID: str = os.getenv("COGNITO_CLIENT_ID", "")
+    COGNITO_CLIENT_SECRET: str = os.getenv("COGNITO_CLIENT_SECRET", "")
+    COGNITO_SCOPE: str = os.getenv(
+        "COGNITO_SCOPE",
+        "default-m2m-resource-server-lke1a1/read"
+    )
+    COGNITO_REGION: str = os.getenv("COGNITO_REGION", "us-east-1")
+
 settings = Settings()

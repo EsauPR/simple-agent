@@ -84,6 +84,27 @@ The following secrets need to be populated in AWS Secrets Manager after initial 
      --secret-string '{"ACCOUNT_SID":"your-sid","AUTH_TOKEN":"your-token","PHONE_NUMBER":"+1234567890"}'
    ```
 
+3. **Cognito Secrets**: `{project_name}-{environment}-cognito-secrets`
+
+   The secret must be a JSON object with the following structure:
+   ```json
+   {
+     "TOKEN_ENDPOINT": "https://your-domain.auth.us-east-1.amazoncognito.com/oauth2/token",
+     "USER_POOL_ID": "us-east-1_XXXXXXXXX",
+     "CLIENT_ID": "your-client-id",
+     "CLIENT_SECRET": "your-client-secret",
+     "SCOPE": "default-m2m-resource-server-lke1a1/read",
+     "REGION": "us-east-1"
+   }
+   ```
+
+   To set it:
+   ```bash
+   aws secretsmanager put-secret-value \
+     --secret-id kavak-agent-production-cognito-secrets \
+     --secret-string '{"TOKEN_ENDPOINT":"https://your-domain.auth.us-east-1.amazoncognito.com/oauth2/token","USER_POOL_ID":"us-east-1_XXXXXXXXX","CLIENT_ID":"your-client-id","CLIENT_SECRET":"your-client-secret","SCOPE":"default-m2m-resource-server-lke1a1/read","REGION":"us-east-1"}'
+   ```
+
 ## Database URL
 
 The database URL is automatically generated and stored in Secrets Manager after Aurora is created. The format is:

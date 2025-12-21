@@ -2,21 +2,22 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from twilio.request_validator import RequestValidator
-from twilio.twiml.messaging_response import MessagingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.connection import get_db
+from src.dependencies.auth import auth
 from src.services.agent.chat_service import ChatService
+from src.services.message_queue import message_queue
 from src.schemas.chat import ChatMessageRequest, ChatMessageResponse
 from src.config import settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chat", tags=["chat"])
 
-
 @router.post("/message", response_model=ChatMessageResponse)
 async def process_message(
     request: ChatMessageRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(auth)
 ):
     """Process a user message"""
     chat_service = ChatService(db)
@@ -33,10 +34,9 @@ async def process_message(
 
 @router.post("/webhooks/twilio")
 async def twilio_webhook(
-    request: Request,
-    db: AsyncSession = Depends(get_db)
+    request: Request
 ):
-    """Twilio webhook for WhatsApp"""
+    """Twilio webhook for WhatsApp - enqueues message and responds immediately"""
     # Validate Twilio signature
     if settings.TWILIO_WEBHOOK_SECRET:
         validator = RequestValidator(settings.TWILIO_WEBHOOK_SECRET)
@@ -55,14 +55,9 @@ async def twilio_webhook(
     if not phone_number or not user_message:
         raise HTTPException(status_code=400, detail="Missing From or Body")
 
-    # Process message
-    chat_service = ChatService(db)
-    response_text = await chat_service.process_message(phone_number, user_message)
+    # Enqueue message for asynchronous processing
+    await message_queue.enqueue_message(phone_number, user_message)
+    logger.info(f"Message enqueued for {phone_number}")
 
-    logger.debug(f"Response text: {response_text}")
-
-    # Create TwiML response
-    twiml_response = MessagingResponse()
-    twiml_response.message(response_text)
-
-    return Response(content=str(twiml_response), media_type="application/xml")
+    # Return immediate 200 OK response
+    return Response(status_code=200)
