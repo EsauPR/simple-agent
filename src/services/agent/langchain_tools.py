@@ -1,46 +1,54 @@
-from typing import Optional, Type, Any, List
+import logging
+from typing import Optional, List
 from decimal import Decimal
 from pydantic import BaseModel, Field
 from langchain.tools import BaseTool, tool, ToolRuntime
 from sqlalchemy.ext.asyncio import AsyncSession
-import asyncio
+from src.services.car_service import CarService
+from src.services.agent.memory_manager import memory_manager
+from src.services.embedding_service import EmbeddingService
+from src.services.financing_service import FinancingService
+from src.repositories.car_repository import CarRepository
+from src.schemas.car import CarResponse
+from src.config import settings
 
+logger = logging.getLogger(__name__)
 
-# ============ Input Schemas ============
+# Input Schemas
 
 class SearchCarsInput(BaseModel):
-    """Input para buscar autos en el catálogo"""
-    make: Optional[str] = Field(None, description="Marca del auto (ej: Toyota, Honda, BMW)")
-    model: Optional[str] = Field(None, description="Modelo del auto (ej: Corolla, Civic, X5)")
-    min_year: Optional[int] = Field(None, description="Año mínimo del auto")
-    max_year: Optional[int] = Field(None, description="Año máximo del auto")
-    min_price: Optional[float] = Field(None, description="Precio mínimo en pesos")
-    max_price: Optional[float] = Field(None, description="Precio máximo en pesos")
-    limit: int = Field(5, description="Número máximo de resultados")
+    """Input to search cars in the catalog"""
+    make: Optional[str] = Field(None, description="Make of the car (e.g: Toyota, Honda, BMW)")
+    model: Optional[str] = Field(None, description="Model of the car (e.g: Corolla, Civic, X5)")
+    min_year: Optional[int] = Field(None, description="Minimum year of the car")
+    max_year: Optional[int] = Field(None, description="Maximum year of the car")
+    min_price: Optional[float] = Field(None, description="Minimum price in pesos")
+    max_price: Optional[float] = Field(None, description="Maximum price in pesos")
+    limit: int = Field(5, description="Maximum number of results")
 
 
 class CalculateFinancingInput(BaseModel):
-    """Input para calcular financiamiento"""
-    car_price: float = Field(..., description="Precio del auto en pesos")
-    down_payment: float = Field(..., description="Enganche en pesos")
-    stock_id: Optional[str] = Field(None, description="Stock ID del auto (opcional)")
+    """Input to calculate financing"""
+    car_price: float = Field(..., description="Price of the car in pesos")
+    down_payment: float = Field(..., description="Down payment in pesos")
+    stock_id: Optional[str] = Field(None, description="Stock ID of the car (optional)")
 
 
 class SearchKnowledgeBaseInput(BaseModel):
-    """Input para buscar en la base de conocimiento"""
-    query: str = Field(..., description="Pregunta o consulta sobre Kavak")
+    """Input to search in the knowledge base"""
+    query: str = Field(..., description="Question or query about Kavak")
 
 
 class GetCarDetailsInput(BaseModel):
-    """Input para obtener detalles de un auto"""
-    stock_id: Optional[str] = Field(None, description="Stock ID del auto")
-    reference: Optional[str] = Field(None, description="Referencia contextual como 'ese auto', 'el anterior'")
+    """Input to get details of a car"""
+    stock_id: Optional[str] = Field(None, description="Stock ID of the car")
+    reference: Optional[str] = Field(None, description="Contextual reference like 'that car', 'the previous one'")
 
 
-# ============ Tools ============
+# Tools
 
 def create_search_cars_tool(db: AsyncSession):
-    """Crea la tool para buscar autos"""
+    """Create the tool to search cars"""
 
     @tool
     async def search_cars(
@@ -53,13 +61,14 @@ def create_search_cars_tool(db: AsyncSession):
         limit: int = 5,
         runtime: ToolRuntime = None  # Hidden parameter, not shown to model
     ) -> str:
-        """Busca autos en el catálogo de Kavak basado en preferencias del cliente.
-        Usa esta herramienta cuando el usuario quiera recomendaciones de autos o busque un auto específico.
-        Puedes filtrar por marca, modelo, año y precio.
+        """Search cars in the Kavak catalog based on customer preferences.
+        Use this tool when the user wants to recommend cars or search for a specific car.
+        You can filter by make, model, year and price.
         """
-        from src.services.car_service import CarService
-        from src.services.agent.memory_manager import memory_manager
-
+        logger.info(
+            f"Executing tool search_cars - make={make}, model={model}, min_year={min_year}, "
+            f"max_year={max_year}, min_price={min_price}, max_price={max_price}, limit={limit}"
+        )
         car_service = CarService(db)
 
         cars = await car_service.search_cars(
@@ -73,6 +82,7 @@ def create_search_cars_tool(db: AsyncSession):
         )
 
         if not cars:
+            logger.debug("Cars not found")
             return "No encontré autos que coincidan con esas preferencias. Intenta con otros criterios."
 
         # Convertir DTOs a diccionarios para el memory_manager
@@ -103,7 +113,7 @@ def create_search_cars_tool(db: AsyncSession):
 
 
 def create_calculate_financing_tool():
-    """Crea la tool para calcular financiamiento"""
+    """Create the tool to calculate the financing plan"""
 
     @tool
     def calculate_financing(
@@ -111,17 +121,17 @@ def create_calculate_financing_tool():
         down_payment: float,
         stock_id: Optional[str] = None
     ) -> str:
-        """Calcula planes de financiamiento para un auto.
-        Usa esta herramienta cuando el usuario pregunte por mensualidades, financiamiento, o pagos mensuales.
-        Necesitas el precio del auto y el enganche. La tasa de interés es 10% anual fija.
+        """Calculate financing plans for a car.
+        Use this tool when the user asks for monthly payments, financing, or monthly payments.
+        You need the price of the car and the down payment. The interest rate is 10% annual fixed.
 
-        IMPORTANTE: Los plazos disponibles son SOLO 3, 4, 5 o 6 años. Esta herramienta calcula automáticamente
-        todos los plazos válidos (3, 4, 5, 6 años) y muestra las opciones al usuario.
+        IMPORTANT: The available terms are ONLY 3, 4, 5 or 6 years. This tool automatically
+        calculates all valid terms (3, 4, 5, 6 years) and shows the options to the user.
 
-        Si el usuario menciona un plazo diferente a 3, 4, 5 o 6 años, NO uses esta herramienta.
-        En su lugar, informa al usuario que solo se ofrecen plazos de 3, 4, 5 o 6 años y pídele que elija uno válido.
+        If the user mentions a term different from 3, 4, 5 or 6 years, DO NOT use this tool.
+        Instead, inform the user that only terms of 3, 4, 5 or 6 years are available and ask them to choose one valid.
         """
-        from src.services.financing_service import FinancingService
+        logger.info(f"Executing tool calculate_financing - car_price={car_price}, down_payment={down_payment}, stock_id={stock_id}")
 
         financing_service = FinancingService()
         car_price_decimal = Decimal(str(car_price))
@@ -174,17 +184,15 @@ def create_calculate_financing_tool():
 
 
 def create_search_knowledge_base_tool(db: AsyncSession):
-    """Crea la tool para buscar en la base de conocimiento"""
+    """Create the tool to search in the knowledge base"""
 
     @tool
     async def search_kavak_info(query: str) -> str:
-        """Busca información sobre Kavak, sus servicios, ubicaciones, propuesta de valor, etc.
-        Usa esta herramienta cuando el usuario pregunte sobre qué es Kavak, dónde están ubicados,
-        qué servicios ofrecen, o cualquier información general sobre la empresa.
+        """Search information about Kavak, its services, locations, value proposition, etc.
+        Use this tool when the user asks about what Kavak is, where it is located,
+        what services it offers, or any general information about Kavak.
         """
-        from src.services.embedding_service import EmbeddingService
-        from src.config import settings
-
+        logger.info(f"Executing tool search_kavak_info - query={query}")
         embedding_service = EmbeddingService(db)
 
         try:
@@ -194,20 +202,23 @@ def create_search_knowledge_base_tool(db: AsyncSession):
             )
 
             if not similar_chunks:
+                logger.debug("No similar chunks found")
                 return "No encontré información específica sobre eso en mi base de conocimiento."
 
             # Combinar contenido relevante
             context = "\n\n".join([chunk.content for chunk in similar_chunks])
+            logger.debug(f"Context: {context}")
             return f"Información encontrada sobre Kavak:\n\n{context}"
 
-        except Exception:
+        except Exception as e:
+            logger.error(f"Error searching knowledge base: {e}")
             return "No pude buscar información en este momento. Por favor intenta de nuevo."
 
     return search_kavak_info
 
 
 def create_get_car_details_tool(db: AsyncSession):
-    """Crea la tool para obtener detalles de un auto"""
+    """Create the tool to obtain the car details"""
 
     @tool
     async def get_car_details(
@@ -215,14 +226,11 @@ def create_get_car_details_tool(db: AsyncSession):
         reference: Optional[str] = None,
         runtime: ToolRuntime = None  # Hidden parameter, not shown to model
     ) -> str:
-        """Obtiene detalles completos de un auto específico.
-        Usa esta herramienta cuando necesites información de un auto por su Stock ID,
-        o cuando el usuario haga referencia a 'ese auto', 'el anterior', 'el primero', etc.
+        """Get the complete details of a specific car.
+        Use this tool when you need information about a car by its Stock ID,
+        or when the user makes reference to 'that car', 'the previous one', 'the first one', etc.
         """
-        from src.services.car_service import CarService
-        from src.services.agent.memory_manager import memory_manager
-
-        car_service = CarService(db)
+        logger.info(f"Executing tool get_car_details - stock_id={stock_id}, reference={reference}")
         car = None
 
         # If there's a contextual reference, search in agent state or context
@@ -251,8 +259,6 @@ def create_get_car_details_tool(db: AsyncSession):
         # If there's stock_id, search directly
         car = None
         if not car_dict and stock_id:
-            from src.repositories.car_repository import CarRepository
-            from src.schemas.car import CarResponse
             car_repo = CarRepository(db)
             car_model = await car_repo.get_by_stock_id(stock_id)
             if car_model:
@@ -260,7 +266,6 @@ def create_get_car_details_tool(db: AsyncSession):
 
         # If we have a dictionary from context, convert it to DTO
         if car_dict and not car:
-            from src.schemas.car import CarResponse
             car = CarResponse.model_validate(car_dict)
 
         if not car:
@@ -293,7 +298,7 @@ def create_get_car_details_tool(db: AsyncSession):
 
 
 def create_tools(db: AsyncSession, phone_number: Optional[str] = None) -> List[BaseTool]:
-    """Crea las herramientas para el agente"""
+    """Create the tools for the agent"""
     return [
         create_search_cars_tool(db),
         create_calculate_financing_tool(),

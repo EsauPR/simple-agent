@@ -50,24 +50,29 @@ class EmbeddingRepository:
     ) -> List[KnowledgeBase]:
         """Search similar embeddings using cosine similarity"""
 
-        # Convert embedding to pgvector format
+        # Convert embedding to pgvector literal format
+        # Format: '[1.0,2.0,3.0]'::vector
         embedding_str = "[" + ",".join(map(str, query_embedding)) + "]"
+        # Escape single quotes in the embedding string (though unlikely to have them)
+        embedding_str_escaped = embedding_str.replace("'", "''")
 
         # Use direct SQL query for pgvector
         # The <=> operator calculates cosine distance (smaller is more similar)
+        # Use literal format directly in SQL for asyncpg compatibility
+        # The embedding is generated internally, so it's safe to use directly
         sql = """
             SELECT id, content, source_url, embedding, metadata, created_at, updated_at
             FROM knowledge_base
         """
 
-        params = {"query_embedding": embedding_str, "limit": limit}
+        params = {"limit": limit}
 
         if source_url:
             sql += " WHERE source_url = :source_url"
             params["source_url"] = source_url
-            sql += " ORDER BY embedding <=> :query_embedding::vector LIMIT :limit"
+            sql += f" ORDER BY embedding <=> '{embedding_str_escaped}'::vector LIMIT :limit"
         else:
-            sql += " ORDER BY embedding <=> :query_embedding::vector LIMIT :limit"
+            sql += f" ORDER BY embedding <=> '{embedding_str_escaped}'::vector LIMIT :limit"
 
         result = await self.db.execute(text(sql), params)
         rows = result.fetchall()

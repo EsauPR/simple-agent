@@ -1,3 +1,4 @@
+import logging
 from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from decimal import Decimal
@@ -10,6 +11,7 @@ from src.utils.text_processing import (
     find_similar_model
 )
 
+logger=logging.getLogger(__name__)
 
 class CarService:
     def __init__(self, db: AsyncSession):
@@ -49,6 +51,8 @@ class CarService:
             normalized_model = find_similar_model(model, available_models)
             if not normalized_model:
                 normalized_model = normalize_model(model)
+
+        logger.debug(f"Search car make {normalized_make} model {normalize_model}")
 
         # Create filters
         filters = CarFilter(

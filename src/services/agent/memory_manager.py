@@ -87,8 +87,6 @@ class MemoryManager:
 
     def get_memory_as_dict(self, phone_number: str) -> Optional[dict]:
         """Get memory as dictionary (for API/debug)"""
-        from langchain_core.messages import HumanMessage
-
         context = self._contexts.get(phone_number)
 
         # Try to get messages from checkpointer
@@ -104,5 +102,5 @@ class MemoryManager:
         }
 
 
-# Instancia global del gestor de memoria
+# Global memory manager instance
 memory_manager = MemoryManager()

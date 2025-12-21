@@ -1,3 +1,5 @@
+import logging
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
@@ -7,6 +9,7 @@ from src.config import settings
 from src.services.agent.memory_manager import memory_manager, CustomAgentState
 from src.services.agent.langchain_tools import create_tools
 
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """Eres un agente comercial de Kavak, la empresa líder en compra y venta de autos seminuevos en México.
 
@@ -21,14 +24,16 @@ Tu objetivo es ayudar a los clientes de forma amigable y profesional. Puedes:
 4. **Detalles de autos**: Obtener información detallada de un auto específico. Usa la herramienta 'get_car_details'.
 
 Instrucciones importantes:
+- **LÍMITE DE CARACTERES CRÍTICO**: Tus respuestas NO deben superar 1000 caracteres. Las respuestas se envían por WhatsApp y deben ser concisas. Resume la información de manera clara y directa. Si tienes mucha información, prioriza lo más importante y ofrece continuar en otro mensaje si es necesario.
 - Siempre mantén un tono profesional pero amigable
 - Si el usuario menciona "ese auto", "el anterior" o referencias similares, usa la herramienta 'get_car_details' con la referencia
 - Para calcular financiamiento, necesitas el precio del auto y el enganche. Si no tienes el precio, primero busca el auto
 - Si el usuario pregunta por un plazo de financiamiento, VALIDA que sea 3, 4, 5 o 6 años. Si menciona otro plazo (ej: 2 años, 7 años, 24 meses, etc.), explícale amablemente que solo se ofrecen plazos de 3, 4, 5 o 6 años y pídele que elija uno de estos
 - Si no tienes suficiente información para ayudar, pregunta amablemente al usuario
 - Responde siempre en español
-- Sé conciso pero informativo
+- Sé MUY conciso pero informativo - prioriza la información esencial
 - Si el usuario pregunta algo fuera de tu alcance (compra de autos nuevos, servicios de taller, etc.), indica amablemente que solo puedes ayudar con autos seminuevos de Kavak
+- Usa viñetas y listas cortas para organizar información de manera compacta
 """
 
 
@@ -63,13 +68,14 @@ class ChatService:
     ) -> str:
         """Process a user message and generate response using the agent"""
         # Get additional context if exists
+        logger.debug(f"Getting context for phone number: {phone_number}")
         context = memory_manager.get_context(phone_number)
-
+        logger.debug(f"Context: {context}")
         # Prepare initial state with additional context
         initial_state = {
             "messages": [{"role": "user", "content": user_message}]
         }
-
+        logger.debug(f"Initial state: {initial_state}")
         # Add additional context if exists
         if context:
             if context.last_cars_recommended:
@@ -94,8 +100,24 @@ class ChatService:
             else:
                 response = "Lo siento, no pude procesar tu mensaje. ¿Podrías reformularlo?"
 
+            # Ensure response doesn't exceed 1400 characters
+            MAX_RESPONSE_LENGTH = 1400
+            if len(response) > MAX_RESPONSE_LENGTH:
+                logger.warning(f"Response exceeded {MAX_RESPONSE_LENGTH} characters ({len(response)}), truncating...")
+                # Truncate at the last complete sentence before the limit
+                truncated = response[:MAX_RESPONSE_LENGTH]
+                last_period = truncated.rfind('.')
+                last_newline = truncated.rfind('\n')
+                # Use the last complete sentence or line, whichever is closer to the limit
+                cut_point = max(last_period, last_newline)
+                if cut_point > MAX_RESPONSE_LENGTH * 0.8:  # Only if we can keep at least 80% of the message
+                    response = truncated[:cut_point + 1]
+                else:
+                    response = truncated
+
             return response
 
         except Exception as e:
             # In case of error, try to give a friendly response
+            logger.error(f"Error processing message: {e}")
             return "Lo siento, tuve un problema procesando tu mensaje. ¿Podrías intentar de nuevo?"
