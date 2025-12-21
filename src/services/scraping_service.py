@@ -6,11 +6,11 @@ from bs4 import BeautifulSoup
 
 class ScrapingService:
     def __init__(self):
-        self.chunk_size = 1000  # Caracteres por chunk
-        self.chunk_overlap = 200  # Overlap entre chunks
+        self.chunk_size = 1000
+        self.chunk_overlap = 200
 
     async def scrape_url(self, url: str) -> str:
-        """Scrapea el contenido de una URL"""
+        """Scrape the content of a URL"""
         async with httpx.AsyncClient(timeout=30.0) as client:
             try:
                 response = await client.get(url)
@@ -20,28 +20,28 @@ class ScrapingService:
                 raise Exception(f"Error scraping URL {url}: {str(e)}")
 
     def clean_text(self, html: str) -> str:
-        """Limpia y extrae texto del HTML"""
+        """Clean and extract text from HTML"""
         soup = BeautifulSoup(html, 'html.parser')
 
-        # Remover scripts y styles
+        # Remove scripts and styles
         for script in soup(["script", "style", "meta", "link"]):
             script.decompose()
 
-        # Extract text
+        # Extract the text
         text = soup.get_text()
 
-        # Clean spaces and line breaks
+        # Clean spaces and line breaks and remove special characters
         lines = (line.strip() for line in text.splitlines())
         chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
         text = ' '.join(chunk for chunk in chunks if chunk)
 
-        # Remover caracteres especiales excesivos
+        # Remove excessive special characters
         text = re.sub(r'\s+', ' ', text)
 
         return text
 
     def chunk_text(self, text: str) -> List[str]:
-        """Divide el texto en chunks para embeddings"""
+        """Divide the text into chunks for embeddings"""
         if len(text) <= self.chunk_size:
             return [text]
 
@@ -74,7 +74,7 @@ class ScrapingService:
         return chunks
 
     async def scrape_and_chunk(self, url: str) -> List[str]:
-        """Scrapea una URL y retorna chunks de texto"""
+        """Scrape a URL and return chunks of text"""
         html = await self.scrape_url(url)
         text = self.clean_text(html)
         chunks = self.chunk_text(text)
