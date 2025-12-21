@@ -1,0 +1,25 @@
+# AWS Configuration
+aws_region = "us-east-1"
+
+# Project Configuration
+project_name = "kavak-agent"
+environment  = "production"
+
+# VPC Configuration
+vpc_cidr = "10.0.0.0/16"
+
+# ECS Configuration
+ecs_desired_count = 2
+ecs_min_capacity   = 1
+ecs_max_capacity   = 10
+ec2_instance_type  = "t3.medium"
+
+# Aurora Configuration
+aurora_instance_class = "db.serverless"
+aurora_min_capacity   = 0.5
+aurora_max_capacity   = 16
+db_name               = "kavak_db"
+db_username           = "kavak_user"
+
+# Note: db_username is sensitive and should be set via environment variable or terraform.tfvars (not committed)
+# Example: export TF_VAR_db_username=your_username
