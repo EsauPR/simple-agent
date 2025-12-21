@@ -20,7 +20,7 @@ class EmbeddingRepository:
         kb = KnowledgeBase(
             content=content,
             source_url=source_url,
-            embedding=embedding,  # pgvector will handle the conversion
+            embedding=embedding,
             metadata_json=metadata
         )
         self.db.add(kb)
@@ -58,8 +58,6 @@ class EmbeddingRepository:
 
         # Use direct SQL query for pgvector
         # The <=> operator calculates cosine distance (smaller is more similar)
-        # Use literal format directly in SQL for asyncpg compatibility
-        # The embedding is generated internally, so it's safe to use directly
         sql = """
             SELECT id, content, source_url, embedding, metadata, created_at, updated_at
             FROM knowledge_base

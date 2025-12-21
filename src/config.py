@@ -34,6 +34,9 @@ class Settings:
     SESSION_TTL_HOURS: int = int(os.getenv("SESSION_TTL_HOURS", "24"))
     MAX_MESSAGES_IN_HISTORY: int = int(os.getenv("MAX_MESSAGES_IN_HISTORY", "20"))
 
+    # Chat/Response Settings
+    MAX_RESPONSE_LENGTH: int = int(os.getenv("MAX_RESPONSE_LENGTH", "1400"))
+
     # RAG Settings
     RAG_TOP_K: int = int(os.getenv("RAG_TOP_K", "5"))
 

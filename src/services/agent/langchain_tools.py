@@ -5,7 +5,6 @@ from pydantic import BaseModel, Field
 from langchain.tools import BaseTool, tool, ToolRuntime
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.services.car_service import CarService
-from src.services.agent.memory_manager import memory_manager
 from src.services.embedding_service import EmbeddingService
 from src.services.financing_service import FinancingService
 from src.repositories.car_repository import CarRepository
@@ -59,7 +58,7 @@ def create_search_cars_tool(db: AsyncSession):
         min_price: Optional[float] = None,
         max_price: Optional[float] = None,
         limit: int = 5,
-        runtime: ToolRuntime = None  # Hidden parameter, not shown to model
+        runtime: ToolRuntime = None
     ) -> str:
         """Search cars in the Kavak catalog based on customer preferences.
         Use this tool when the user wants to recommend cars or search for a specific car.
@@ -85,20 +84,13 @@ def create_search_cars_tool(db: AsyncSession):
             logger.debug("Cars not found")
             return "No encontré autos que coincidan con esas preferencias. Intenta con otros criterios."
 
-        # Convertir DTOs a diccionarios para el memory_manager
+        # Convert DTOs to dictionaries to save in the agent state
         cars_dict = [car.model_dump() for car in cars]
 
-        # Save in context for future references
-        if runtime:
-            # Get thread_id from config
-            thread_id = runtime.config.get("configurable", {}).get("thread_id") if runtime.config else None
-            if thread_id:
-                memory_manager.update_context(thread_id, last_cars_recommended=cars_dict)
-                # Also update agent state if available
-                if hasattr(runtime, 'state') and runtime.state:
-                    runtime.state["last_cars_recommended"] = cars_dict
+        # Save in agent state for future references
+        if runtime and hasattr(runtime, 'state') and runtime.state:
+            runtime.state["last_cars_recommended"] = cars_dict
 
-        # Formatear resultados
         result_lines = ["Encontré los siguientes autos disponibles:\n"]
         for i, car in enumerate(cars, 1):
             result_lines.append(
@@ -233,28 +225,13 @@ def create_get_car_details_tool(db: AsyncSession):
         logger.info(f"Executing tool get_car_details - stock_id={stock_id}, reference={reference}")
         car = None
 
-        # If there's a contextual reference, search in agent state or context
+        # If there's a contextual reference, search in agent state
         car_dict = None
-        if reference and runtime:
-            # First try from agent state
-            if hasattr(runtime, 'state') and runtime.state:
-                if runtime.state.get("selected_car"):
-                    car_dict = runtime.state["selected_car"]
-                elif runtime.state.get("last_cars_recommended"):
-                    car_dict = runtime.state["last_cars_recommended"][0]
-
-            # If not in state, search in additional context
-            if not car_dict:
-                thread_id = runtime.config.get("configurable", {}).get("thread_id") if runtime.config else None
-                if thread_id:
-                    context = memory_manager.get_context(thread_id)
-                    if context:
-                        ref_lower = reference.lower()
-                        if any(r in ref_lower for r in ["ese auto", "el anterior", "ese", "el primero", "el que me dijiste"]):
-                            if context.selected_car:
-                                car_dict = context.selected_car
-                            elif context.last_cars_recommended:
-                                car_dict = context.last_cars_recommended[0]
+        if reference and runtime and hasattr(runtime, 'state') and runtime.state:
+            if runtime.state.get("selected_car"):
+                car_dict = runtime.state["selected_car"]
+            elif runtime.state.get("last_cars_recommended"):
+                car_dict = runtime.state["last_cars_recommended"][0]
 
         # If there's stock_id, search directly
         car = None
@@ -271,15 +248,10 @@ def create_get_car_details_tool(db: AsyncSession):
         if not car:
             return "No encontré el auto especificado. Por favor proporciona el Stock ID o busca autos primero."
 
-        # Save as selected car (convert to dict for memory_manager)
+        # Save as selected car in agent state
         car_dict = car.model_dump()
-        if runtime:
-            thread_id = runtime.config.get("configurable", {}).get("thread_id") if runtime.config else None
-            if thread_id:
-                memory_manager.update_context(thread_id, selected_car=car_dict)
-            # Also update agent state if available
-            if hasattr(runtime, 'state') and runtime.state:
-                runtime.state["selected_car"] = car_dict
+        if runtime and hasattr(runtime, 'state') and runtime.state:
+            runtime.state["selected_car"] = car_dict
 
         return (
             f"Detalles del auto:\n"

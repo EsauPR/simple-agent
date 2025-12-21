@@ -1,9 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import asyncio
 from src.database.connection import init_db, close_db
-from src.services.agent.memory_manager import memory_manager
 from src.routers import chat, cars, financing, embeddings
 from src.middleware import LoggingMiddleware
 from src.config import settings
@@ -17,25 +15,9 @@ async def lifespan(app: FastAPI):
     await init_db()
     print("Database initialized")
 
-    # Background task to clean up inactive memories
-    async def cleanup_memories():
-        while True:
-            await asyncio.sleep(3600)  # Every hour
-            deleted = await memory_manager.cleanup_inactive_memories()
-            if deleted > 0:
-                print(f"Cleaned up {deleted} inactive memories")
-
-    cleanup_task = asyncio.create_task(cleanup_memories())
-
     yield
 
-    # Shutdown the application
-    cleanup_task.cancel()
-    try:
-        await cleanup_task
-    except asyncio.CancelledError:
-        pass
-
+    # Shutdown
     await close_db()
     print("Application shutdown")
 

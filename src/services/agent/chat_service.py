@@ -67,23 +67,15 @@ class ChatService:
         user_message: str
     ) -> str:
         """Process a user message and generate response using the agent"""
-        # Get additional context if exists
-        logger.debug(f"Getting context for phone number: {phone_number}")
-        context = memory_manager.get_context(phone_number)
-        logger.debug(f"Context: {context}")
-        # Prepare initial state with additional context
+        logger.debug(f"Processing message for phone number: {phone_number}")
+        logger.debug(f"User message: {user_message}")
         initial_state = {
             "messages": [{"role": "user", "content": user_message}]
         }
-        logger.debug(f"Initial state: {initial_state}")
-        # Add additional context if exists
-        if context:
-            if context.last_cars_recommended:
-                initial_state["last_cars_recommended"] = context.last_cars_recommended
-            if context.selected_car:
-                initial_state["selected_car"] = context.selected_car
 
         # Configure thread_id to maintain conversation
+        # The checkpointer will automatically restore the previous state including
+        # last_cars_recommended and selected_car from previous interactions
         config: RunnableConfig = {
             "configurable": {"thread_id": phone_number}
         }
@@ -91,6 +83,8 @@ class ChatService:
         try:
             # Execute the agent
             result = await self.agent.ainvoke(initial_state, config)
+
+            logger.debug(f"Agent result: {result}")
 
             # Get the last response from the agent
             messages = result.get("messages", [])
@@ -100,17 +94,16 @@ class ChatService:
             else:
                 response = "Lo siento, no pude procesar tu mensaje. ¿Podrías reformularlo?"
 
-            # Ensure response doesn't exceed 1400 characters
-            MAX_RESPONSE_LENGTH = 1400
-            if len(response) > MAX_RESPONSE_LENGTH:
-                logger.warning(f"Response exceeded {MAX_RESPONSE_LENGTH} characters ({len(response)}), truncating...")
+            # Ensure response doesn't exceed configured limit to keep it within WhatsApp limits
+            if len(response) > settings.MAX_RESPONSE_LENGTH:
+                logger.warning(f"Response exceeded {settings.MAX_RESPONSE_LENGTH} characters ({len(response)}), truncating...")
                 # Truncate at the last complete sentence before the limit
-                truncated = response[:MAX_RESPONSE_LENGTH]
+                truncated = response[:settings.MAX_RESPONSE_LENGTH]
                 last_period = truncated.rfind('.')
                 last_newline = truncated.rfind('\n')
                 # Use the last complete sentence or line, whichever is closer to the limit
                 cut_point = max(last_period, last_newline)
-                if cut_point > MAX_RESPONSE_LENGTH * 0.8:  # Only if we can keep at least 80% of the message
+                if cut_point > settings.MAX_RESPONSE_LENGTH * 0.8:  # Only if we can keep at least 80% of the message
                     response = truncated[:cut_point + 1]
                 else:
                     response = truncated

@@ -6,7 +6,6 @@ from twilio.twiml.messaging_response import MessagingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.connection import get_db
 from src.services.agent.chat_service import ChatService
-from src.services.agent.memory_manager import memory_manager
 from src.schemas.chat import ChatMessageRequest, ChatMessageResponse
 from src.config import settings
 
