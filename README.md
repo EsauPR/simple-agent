@@ -19,7 +19,205 @@ Bot comercial de Kavak con integración WhatsApp, LangChain Agents, y sistema RA
 
 ## Arquitectura
 
+### Diagrama de Componentes
 
+![Component Diagram](docs/img/component-diagram.png)
+
+```mermaid
+flowchart TD
+    %% External Services
+    Twilio[Twilio WhatsApp]
+    OpenAI[OpenAI API]
+    Cognito[AWS Cognito]
+
+    %% API Gateway
+    API[FastAPI Application]
+
+    %% Routers
+    AuthRouter[Auth Router<br/>/auth/login]
+    ChatRouter[Chat Router<br/>/api/v1/chat]
+    CarsRouter[Cars Router<br/>/api/v1/cars]
+    FinancingRouter[Financing Router<br/>/api/v1/financing]
+    EmbeddingsRouter[Embeddings Router<br/>/api/v1/embeddings]
+
+    %% Authentication
+    AuthDependency[Auth Dependency<br/>JWT Validation]
+    AuthService[Auth Service<br/>Cognito Integration]
+
+    %% Message Processing
+    MessageQueue[Message Queue<br/>In-Memory Queue]
+    MessageProcessor[Message Processor<br/>Worker Cron 2s]
+    TwilioService[Twilio Service<br/>Send Messages]
+
+    %% Chat Service
+    ChatService[Chat Service<br/>LangChain Agent]
+    LangChainTools[LangChain Tools<br/>SearchCars, CalculateFinancing, etc.]
+    MemoryManager[Memory Manager<br/>Conversation Context]
+
+    %% Business Services
+    CarService[Car Service]
+    FinancingService[Financing Service]
+    EmbeddingService[Embedding Service]
+    ScrapingService[Scraping Service]
+
+    %% Data Layer
+    CarRepo[Car Repository]
+    EmbeddingRepo[Embedding Repository]
+    Database[(PostgreSQL<br/>+ pgvector)]
+
+    %% External Connections
+    Twilio -->|Webhook| ChatRouter
+    API --> AuthRouter
+    API --> ChatRouter
+    API --> CarsRouter
+    API --> FinancingRouter
+    API --> EmbeddingsRouter
+
+    %% Authentication Flow
+    AuthRouter --> AuthService
+    AuthService --> Cognito
+    CarsRouter --> AuthDependency
+    FinancingRouter --> AuthDependency
+    EmbeddingsRouter --> AuthDependency
+    ChatRouter --> AuthDependency
+    AuthDependency --> AuthService
+
+    %% Message Processing Flow
+    ChatRouter -->|Enqueue| MessageQueue
+    MessageQueue -->|Dequeue| MessageProcessor
+    MessageProcessor --> ChatService
+    MessageProcessor --> TwilioService
+    TwilioService -->|Send Response| Twilio
+
+    %% Chat Service Flow
+    ChatService --> LangChainTools
+    ChatService --> MemoryManager
+    ChatService --> OpenAI
+    LangChainTools --> CarService
+    LangChainTools --> FinancingService
+    LangChainTools --> EmbeddingService
+
+    %% Business Logic Flow
+    CarService --> CarRepo
+    FinancingService --> CarRepo
+    EmbeddingService --> EmbeddingRepo
+    EmbeddingService --> ScrapingService
+
+    %% Data Access
+    CarRepo --> Database
+    EmbeddingRepo --> Database
+
+    %% Styling
+    classDef external fill:#e1f5ff,stroke:#01579b,stroke-width:2px
+    classDef router fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef service fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+    classDef data fill:#fff3e0,stroke:#e65100,stroke-width:2px
+
+    class Twilio,OpenAI,Cognito external
+    class AuthRouter,ChatRouter,CarsRouter,FinancingRouter,EmbeddingsRouter router
+    class AuthService,MessageQueue,MessageProcessor,TwilioService,ChatService,CarService,FinancingService,EmbeddingService service
+    class Database,CarRepo,EmbeddingRepo data
+```
+
+### Arquitectura de Infraestructura (AWS)
+
+![Component Diagram](docs/img/arch-diagram.png)
+
+```mermaid
+flowchart TD
+    %% External
+    Internet[Internet<br/>Usuarios]
+    TwilioExt[Twilio WhatsApp]
+    OpenAIExt[OpenAI API]
+    CognitoExt[AWS Cognito<br/>User Pool]
+
+    %% API Layer
+    APIGateway[API Gateway<br/>HTTP API<br/>HTTPS]
+
+    %% Network Layer
+    VPCLink[VPC Link V2]
+    IGW[Internet Gateway]
+    NAT1[NAT Gateway<br/>AZ-1]
+    NAT2[NAT Gateway<br/>AZ-2]
+
+    %% VPC
+    subgraph VPC["VPC (10.0.0.0/16)"]
+        subgraph PublicSubnets["Public Subnets"]
+            PublicSubnet1[Public Subnet 1<br/>AZ-1]
+            PublicSubnet2[Public Subnet 2<br/>AZ-2]
+        end
+
+        subgraph PrivateSubnets["Private Subnets"]
+            PrivateSubnet1[Private Subnet 1<br/>AZ-1]
+            PrivateSubnet2[Private Subnet 2<br/>AZ-2]
+        end
+
+        %% Load Balancer
+        ALB[Application Load Balancer<br/>Internal/Private<br/>Port 80]
+
+        %% Compute
+        subgraph ECSCluster["ECS Cluster"]
+            EC2Instance1[EC2 Instance<br/>ECS Optimized<br/>t3.medium]
+            EC2Instance2[EC2 Instance<br/>ECS Optimized<br/>t3.medium]
+            ECSTasks[ECS Tasks<br/>FastAPI Containers<br/>Port 8000]
+        end
+
+        %% Database
+        Aurora[Aurora PostgreSQL 16<br/>Serverless<br/>+ pgvector<br/>Private]
+    end
+
+    %% Storage & Services
+    ECR[ECR Repository<br/>Docker Images]
+    SecretsManager[Secrets Manager<br/>- Database URL<br/>- OpenAI API Key<br/>- Twilio Secrets<br/>- Cognito Secrets]
+    CloudWatch[CloudWatch Logs<br/>Container Insights]
+
+    %% Connections - External to API
+    Internet -->|HTTPS| APIGateway
+    TwilioExt -.->|Webhook| APIGateway
+
+    %% API Gateway Flow
+    APIGateway -->|VPC Link| VPCLink
+    VPCLink -->|Private Network| ALB
+
+    %% Load Balancer to ECS
+    ALB -->|HTTP:8000| ECSTasks
+    ECSTasks -.->|Runs on| EC2Instance1
+    ECSTasks -.->|Runs on| EC2Instance2
+
+    %% Network Infrastructure
+    IGW --> PublicSubnet1
+    IGW --> PublicSubnet2
+    NAT1 --> IGW
+    NAT2 --> IGW
+    PrivateSubnet1 -->|Route| NAT1
+    PrivateSubnet2 -->|Route| NAT2
+
+    %% ECS to Services
+    ECSTasks -->|Pull Images| ECR
+    ECSTasks -->|Read Secrets| SecretsManager
+    ECSTasks -->|Write Logs| CloudWatch
+    ECSTasks -->|Query| Aurora
+    ECSTasks -->|API Calls| OpenAIExt
+    ECSTasks -->|API Calls| CognitoExt
+    ECSTasks -->|Send Messages| TwilioExt
+
+    %% Database Access
+    Aurora -.->|In| PrivateSubnet1
+    Aurora -.->|In| PrivateSubnet2
+
+    %% Styling
+    classDef external fill:#e1f5ff,stroke:#01579b,stroke-width:2px
+    classDef network fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef compute fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+    classDef storage fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef database fill:#fce4ec,stroke:#880e4f,stroke-width:2px
+
+    class Internet,TwilioExt,OpenAIExt,CognitoExt external
+    class APIGateway,VPCLink,IGW,NAT1,NAT2,ALB network
+    class EC2Instance1,EC2Instance2,ECSTasks compute
+    class ECR,SecretsManager,CloudWatch storage
+    class Aurora database
+```
 
 ## Requisitos
 
@@ -245,10 +443,17 @@ Una vez iniciada la aplicación, acceder a:
 - Swagger UI: `http://localhost:8000/docs`
 - ReDoc: `http://localhost:8000/redoc`
 
+
+## Deployment
+
+Ve a la carpeta `terraform/` y sigue las instrucciones en el README.md
+Nota: Es un deployment basico suceptible a errores. Aún en progreso de refinamiento.
+
 ## Notas
 
 - Las memorias se almacenan en memoria (temporalmente) usando LangChain Memory
 - Para producción, considerar migrar a Redis para memorias compartidas
    - Actualmente solo corre una sola instancia para evitar problemas de memoria compartida
-- Los embeddings se almacenan en PostgreSQL con pgvector
+- Migrar a un sistema de colas como RabbitMQ o SQS para procesar mensajes de WhatsApp
+- Los embeddings se almacenan en PostgreSQL con pgvector para un muy simple RAG
 - Compatible con Amazon Aurora PostgreSQL + pgvector
