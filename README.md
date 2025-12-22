@@ -21,8 +21,6 @@ Bot comercial de Kavak con integración WhatsApp, LangChain Agents, y sistema RA
 
 ### Diagrama de Componentes
 
-![Component Diagram](docs/img/component-diagram.png)
-
 ```mermaid
 flowchart TD
     %% External Services
@@ -121,7 +119,6 @@ flowchart TD
 
 ### Arquitectura de Infraestructura (AWS)
 
-![Component Diagram](docs/img/arch-diagram.png)
 
 ```mermaid
 flowchart TD
